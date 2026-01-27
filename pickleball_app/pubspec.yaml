@@ -18,7 +18,7 @@ dependencies:
   fl_chart: ^1.1.1
   table_calendar: ^3.2.0
   image_picker: ^1.2.1
-  signalr_netcore: ^1.4.4
+  # signalr_netcore: ^1.4.4  # Temporarily disabled - cache issue
   badges: ^3.1.2
   flutter_cache_manager: ^3.4.1
   cached_network_image: ^3.4.1
