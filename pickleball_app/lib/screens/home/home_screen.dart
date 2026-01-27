@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:badges/badges.dart' as badges;
 import '../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
+import 'package:go_router/go_router.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,237 +15,233 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   @override
-  void initState() {
-    super.initState();
-    // Fetch user details when screen loads
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<AuthProvider>(context, listen: false).fetchUserDetails();
-    });
-  }
-
-  Future<void> _handleLogout() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    await authProvider.logout();
-    if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/login');
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppColors.primaryLight, AppColors.primary],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+      backgroundColor: Colors.grey[100],
+      body: Consumer<AuthProvider>(
+        builder: (context, authProvider, child) {
+          final user = authProvider.user;
+          // Safe check, though router handles it
+          if (user == null) return const Center(child: CircularProgressIndicator());
+
+          return CustomScrollView(
+            slivers: [
+              _buildSliverAppBar(context, user.fullName, user.walletBalance, user.avatarUrl),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionTitle('Thống kê hạng (Rank)'),
+                      const SizedBox(height: 12),
+                      _buildRankChart(),
+                      const SizedBox(height: 24),
+                      _buildSectionTitle('Lịch thi đấu sắp tới'),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+              ),
+              _buildUpcomingMatchesList(),
+              const SliverToBoxAdapter(child: SizedBox(height: 80)), // Bottom padding
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSliverAppBar(BuildContext context, String name, double balance, String? avatarUrl) {
+    return SliverAppBar(
+      expandedHeight: 140.0,
+      floating: true,
+      pinned: true,
+      backgroundColor: AppColors.primary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+      ),
+      flexibleSpace: FlexibleSpaceBar(
+        background: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppColors.primary, AppColors.primaryDark],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
           ),
         ),
-        child: SafeArea(
-          child: Consumer<AuthProvider>(
-            builder: (context, authProvider, child) {
-              final user = authProvider.user;
-              
-              if (user == null) {
-                return const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                );
-              }
-
-              return Column(
+        titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: Colors.white,
+              backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+              child: avatarUrl == null 
+                  ? const Icon(Icons.person, color: AppColors.primary) 
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeader(user.fullName, user.walletBalance),
-                  Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.only(top: 20),
-                      padding: const EdgeInsets.all(24),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(30),
-                          topRight: Radius.circular(30),
-                        ),
-                      ),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildWelcomeSection(user.fullName),
-                            const SizedBox(height: 24),
-                            _buildInfoCard('Thông tin tài khoản', [
-                              _buildInfoRow('Tên đăng nhập', user.username),
-                              _buildInfoRow('Email', user.email),
-                              _buildInfoRow('Hạng thành viên', user.tier),
-                              _buildInfoRow('Điểm xếp hạng', user.rankLevel.toString()),
-                            ]),
-                            const SizedBox(height: 16),
-                            _buildLogoutButton(),
-                          ],
-                        ),
-                      ),
-                    ),
+                  Text(
+                    name,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '${balance.toStringAsFixed(0)} VNĐ',
+                    style: const TextStyle(fontSize: 10, color: Colors.white70),
                   ),
                 ],
-              );
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 16.0),
+          child: IconButton(
+            icon: badges.Badge(
+              badgeContent: const Text('3', style: TextStyle(color: Colors.white, fontSize: 10)),
+              child: const Icon(Icons.notifications_outlined, color: Colors.white),
+            ),
+            onPressed: () {
+               // Handle notifications
             },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(String name, double balance) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.person,
-              size: 32,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.account_balance_wallet, color: Colors.white70, size: 16),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${balance.toStringAsFixed(0)} VNĐ',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWelcomeSection(String name) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Chào mừng trở lại! 👋',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Hôm nay là ngày tuyệt vời để chơi Pickleball!',
-          style: TextStyle(
-            fontSize: 14,
-            color: AppColors.textSecondary,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildInfoCard(String title, List<Widget> children) {
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+    );
+  }
+
+  Widget _buildRankChart() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      height: 220,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ...children,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
+      child: LineChart(
+        LineChartData(
+          gridData: FlGridData(show: false),
+          titlesData: FlTitlesData(
+            leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+             rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  switch (value.toInt()) {
+                    case 0: return const Text('WK1', style: TextStyle(fontSize: 10));
+                    case 2: return const Text('WK2', style: TextStyle(fontSize: 10));
+                    case 4: return const Text('WK3', style: TextStyle(fontSize: 10));
+                    case 6: return const Text('WK4', style: TextStyle(fontSize: 10));
+                  }
+                  return const Text('');
+                },
+              ),
             ),
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+          borderData: FlBorderData(show: false),
+          minX: 0,
+          maxX: 6,
+          minY: 0,
+          maxY: 6,
+          lineBarsData: [
+            LineChartBarData(
+              spots: const [
+                FlSpot(0, 3),
+                FlSpot(1, 1),
+                FlSpot(2, 4),
+                FlSpot(3, 2),
+                FlSpot(4, 5),
+                FlSpot(5, 3),
+                FlSpot(6, 4),
+              ],
+              isCurved: true,
+              color: AppColors.primary,
+              barWidth: 3,
+              isStrokeCapRound: true,
+              dotData: FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: AppColors.primary.withOpacity(0.1),
+              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLogoutButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: _handleLogout,
-        icon: const Icon(Icons.logout),
-        label: const Text('Đăng xuất'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.error,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildUpcomingMatchesList() {
+    // Mock Data
+    final matches = List.generate(3, (index) => index);
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+            child: Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(12),
+                leading: Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.sports_tennis, color: AppColors.primary),
+                  ),
+                ),
+                title: const Text(
+                  'Giải Vô Địch Mở Rộng 2024',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(height: 4),
+                    Text('San A - 18:00 24/11/2026'),
+                    SizedBox(height: 2),
+                    Text('vs. Team Avengers', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+                trailing: Chip(
+                  label: const Text('Sắp đấu', style: TextStyle(color: Colors.white, fontSize: 10)),
+                  backgroundColor: AppColors.warning,
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact, 
+                ),
+              ),
+            ),
+          );
+        },
+        childCount: 3,
       ),
     );
   }

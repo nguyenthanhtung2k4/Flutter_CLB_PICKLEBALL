@@ -91,4 +91,19 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<Backend.Hubs.PcmHub>("/pcmHub");
 
+// Seed Data
+using (var scope = app.Services.CreateScope())
+{
+      var services = scope.ServiceProvider;
+      try
+      {
+            await Backend.Data.DbSeeder.Initialize(services);
+      }
+      catch (Exception ex)
+      {
+            var logger = services.GetRequiredService<ILogger<Program>>();
+            logger.LogError(ex, "An error occurred seeding the DB.");
+      }
+}
+
 app.Run();

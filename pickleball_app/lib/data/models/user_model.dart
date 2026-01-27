@@ -8,6 +8,7 @@ class UserModel {
   final String? avatarUrl;
   final String tier;
   final double rankLevel;
+  final String role;
 
   UserModel({
     required this.id,
@@ -19,6 +20,7 @@ class UserModel {
     this.avatarUrl,
     required this.tier,
     required this.rankLevel,
+    this.role = 'User',
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -32,6 +34,7 @@ class UserModel {
       avatarUrl: json['avatarUrl'],
       tier: json['tier']?.toString() ?? 'Standard',
       rankLevel: (json['rankLevel'] ?? 0.0).toDouble(),
+      role: json['roles'] != null && (json['roles'] as List).contains('Admin') ? 'Admin' : 'User',
     );
   }
 

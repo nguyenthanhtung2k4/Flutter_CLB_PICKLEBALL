@@ -3,6 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/config/app_config.dart';
 import '../models/auth_response.dart';
 import '../models/user_model.dart';
+import '../models/court_model.dart';
+import '../models/booking_model.dart';
 
 class ApiService {
   late Dio _dio;
@@ -75,6 +77,40 @@ class ApiService {
     try {
       final response = await _dio.get('/auth/me');
       return UserModel.fromJson(response.data);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // Booking APIs
+  Future<List<CourtModel>> getCourts() async {
+    try {
+      final response = await _dio.get('/courts');
+      return (response.data as List).map((e) => CourtModel.fromJson(e)).toList();
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<List<BookingModel>> getBookings(DateTime from, DateTime to) async {
+    try {
+      final response = await _dio.get('/bookings/calendar', queryParameters: {
+        'from': from.toIso8601String(),
+        'to': to.toIso8601String(),
+      });
+      return (response.data as List).map((e) => BookingModel.fromJson(e)).toList();
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> createBooking(int courtId, DateTime startTime, DateTime endTime) async {
+    try {
+      await _dio.post('/bookings', data: {
+        'courtId': courtId,
+        'startTime': startTime.toIso8601String(),
+        'endTime': endTime.toIso8601String(),
+      });
     } catch (e) {
       throw _handleError(e);
     }
