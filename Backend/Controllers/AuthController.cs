@@ -73,29 +73,41 @@ public class AuthController : ControllerBase
       public async Task<IActionResult> GetMe()
       {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var username = User.FindFirstValue(ClaimTypes.Name);
+
             var member = await _context.Members.FirstOrDefaultAsync(m => m.UserId == userId);
 
             if (member == null) return NotFound("Member profile not found.");
 
+            // Get user from Identity to retrieve email
+            var user = await _userManager.FindByIdAsync(userId!);
+
             return Ok(new
             {
-                  member.Id,
-                  member.FullName,
-                  member.WalletBalance,
-                  member.AvatarUrl,
-                  member.Tier,
-                  member.RankLevel,
-                  // Include other necessary info
-                  UserEmail = User.Identity?.Name
+                  id = userId,
+                  userName = username,
+                  email = user?.Email ?? "",
+                  memberId = member.Id,
+                  fullName = member.FullName,
+                  walletBalance = member.WalletBalance,
+                  avatarUrl = member.AvatarUrl,
+                  tier = member.Tier,
+                  rankLevel = member.RankLevel
             });
       }
 
       [HttpPost("register")]
       public async Task<IActionResult> Register([FromBody] RegisterDto model)
       {
+            // Check if username already exists
             var userExists = await _userManager.FindByNameAsync(model.Username);
             if (userExists != null)
-                  return StatusCode(StatusCodes.Status500InternalServerError, new { Status = "Error", Message = "User already exists!" });
+                  return StatusCode(StatusCodes.Status500InternalServerError, new { Status = "Error", Message = "Username already exists!" });
+
+            // Check if email already exists
+            var emailExists = await _userManager.FindByEmailAsync(model.Email);
+            if (emailExists != null)
+                  return StatusCode(StatusCodes.Status500InternalServerError, new { Status = "Error", Message = "Email already exists!" });
 
             IdentityUser user = new()
             {
@@ -103,9 +115,14 @@ public class AuthController : ControllerBase
                   SecurityStamp = Guid.NewGuid().ToString(),
                   UserName = model.Username
             };
+
             var result = await _userManager.CreateAsync(user, model.Password);
             if (!result.Succeeded)
-                  return StatusCode(StatusCodes.Status500InternalServerError, new { Status = "Error", Message = "User creation failed! Please check user details and try again." });
+            {
+                  // Return detailed error messages from Identity
+                  var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                  return StatusCode(StatusCodes.Status500InternalServerError, new { Status = "Error", Message = $"User creation failed: {errors}" });
+            }
 
             // Create Member Profile linked to this User
             var member = new Backend.Models.Member

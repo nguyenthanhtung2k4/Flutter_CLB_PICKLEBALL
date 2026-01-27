@@ -9,12 +9,32 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
 
+// CORS Configuration for Mobile App
+builder.Services.AddCors(options =>
+{
+      options.AddPolicy("AllowAll", policy =>
+      {
+            policy.AllowAnyOrigin()
+                .AllowAnyMethod()
+                .AllowAnyHeader();
+      });
+});
+
 // Database Configuration
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
 
 // Identity Configuration
-builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
+{
+      // Password settings (relaxed for development)
+      options.Password.RequireDigit = true;
+      options.Password.RequireLowercase = true;
+      options.Password.RequireNonAlphanumeric = false; // No special characters required
+      options.Password.RequireUppercase = false; // No uppercase required
+      options.Password.RequiredLength = 6;
+      options.Password.RequiredUniqueChars = 0;
+})
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
@@ -60,7 +80,10 @@ if (app.Environment.IsDevelopment())
       app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection(); // Tắt HTTPS redirect để cho phép HTTP từ mobile app
+
+// Enable CORS
+app.UseCors("AllowAll");
 
 app.UseAuthentication(); // Ensure Auth is used
 app.UseAuthorization();
