@@ -1,0 +1,39 @@
+## [ Khu vực loại bỏ các file Build ]
+[Bb]in/
+[Oo]bj/
+out/
+
+## [ Khu vực loại bỏ các file của Visual Studio ]
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+
+## [ Khu vực loại bỏ các file của VS Code / Rider ]
+.vscode/
+.idea/
+*.swp
+*.LNK
+
+## [ Khu vực loại bỏ User Secrets & Cấu hình nhạy cảm ]
+# Không đẩy các file chứa mật khẩu lên Git
+appsettings.Development.json
+*.env
+*.env.*
+
+## [ Khu vực loại bỏ NuGet Packages ]
+*.nupkg
+# Nếu dùng mô hình cũ (packages folder), bỏ comment dòng dưới
+# packages/
+
+## [ Khu vực loại bỏ Log và Database tạm ]
+*.log
+*.db
+*.db-shm
+*.db-wal
+
+## [ Khu vực OS ]
+.DS_Store
+Thumbs.db
+
+Bai kiem tra_Flutter.pdf
