@@ -12,6 +12,7 @@ import 'screens/tournament/tournament_screen.dart';
 import 'screens/wallet/wallet_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/profile/profile_screen.dart';
+import 'screens/notification/notification_screen.dart';
 
 void main() {
   runApp(
@@ -31,72 +32,83 @@ class MainApp extends StatefulWidget {
 
 class _MainAppState extends State<MainApp> {
   late final GoRouter _router;
+  bool _routerInitialized = false;
 
   @override
-  void initState() {
-    super.initState();
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     
-    _router = GoRouter(
-      refreshListenable: authProvider,
-      initialLocation: '/home',
-      routes: [
-        GoRoute(
-          path: '/login',
-          builder: (context, state) => const LoginScreen(),
-        ),
-        GoRoute(
-          path: '/register',
-          builder: (context, state) => const RegisterScreen(),
-        ),
-        GoRoute(
-          path: '/admin',
-          builder: (context, state) => const AdminDashboardScreen(),
-        ),
-        ShellRoute(
-          builder: (context, state, child) {
-            return MainLayout(child: child);
-          },
-          routes: [
-            GoRoute(
-              path: '/home',
-              builder: (context, state) => const HomeScreen(),
-            ),
-            GoRoute(
-              path: '/booking',
-              builder: (context, state) => const BookingScreen(),
-            ),
-            GoRoute(
-              path: '/tournaments',
-              builder: (context, state) => const TournamentScreen(),
-            ),
-            GoRoute(
-              path: '/wallet',
-              builder: (context, state) => const WalletScreen(),
-            ),
-            GoRoute(
-              path: '/profile',
-              builder: (context, state) => const ProfileScreen(),
-            ),
-          ],
-        ),
-      ],
-      redirect: (context, state) {
-        final isAuthenticated = authProvider.isAuthenticated;
-        final isLoggingIn = state.matchedLocation == '/login';
-        final isRegistering = state.matchedLocation == '/register';
+    // Only initialize router once
+    if (!_routerInitialized) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      
+      _router = GoRouter(
+        refreshListenable: authProvider,
+        initialLocation: '/home',
+        routes: [
+          GoRoute(
+            path: '/login',
+            builder: (context, state) => const LoginScreen(),
+          ),
+          GoRoute(
+            path: '/register',
+            builder: (context, state) => const RegisterScreen(),
+          ),
+          GoRoute(
+            path: '/admin',
+            builder: (context, state) => const AdminDashboardScreen(),
+          ),
+          ShellRoute(
+            builder: (context, state, child) {
+              return MainLayout(child: child);
+            },
+            routes: [
+              GoRoute(
+                path: '/home',
+                builder: (context, state) => const HomeScreen(),
+              ),
+              GoRoute(
+                path: '/booking',
+                builder: (context, state) => const BookingScreen(),
+              ),
+              GoRoute(
+                path: '/tournaments',
+                builder: (context, state) => const TournamentScreen(),
+              ),
+              GoRoute(
+                path: '/wallet',
+                builder: (context, state) => const WalletScreen(),
+              ),
+              GoRoute(
+                path: '/profile',
+                builder: (context, state) => const ProfileScreen(),
+              ),
+              GoRoute(
+                path: '/notifications',
+                builder: (context, state) => const NotificationScreen(),
+              ),
+            ],
+          ),
+        ],
+        redirect: (context, state) {
+          final isAuthenticated = authProvider.isAuthenticated;
+          final isLoggingIn = state.matchedLocation == '/login';
+          final isRegistering = state.matchedLocation == '/register';
 
-        if (!isAuthenticated && !isLoggingIn && !isRegistering) {
-          return '/login';
-        }
+          if (!isAuthenticated && !isLoggingIn && !isRegistering) {
+            return '/login';
+          }
 
-        if (isAuthenticated && (isLoggingIn || isRegistering)) {
-          return '/home';
-        }
+          if (isAuthenticated && (isLoggingIn || isRegistering)) {
+            return '/home';
+          }
 
-        return null;
-      },
-    );
+          return null;
+        },
+      );
+      
+      _routerInitialized = true;
+    }
   }
 
   @override

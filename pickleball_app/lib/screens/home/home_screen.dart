@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:badges/badges.dart' as badges;
 import '../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../data/services/api_service.dart';
 import 'package:go_router/go_router.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -107,13 +108,27 @@ class _HomeScreenState extends State<HomeScreen> {
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: 16.0),
-          child: IconButton(
-            icon: badges.Badge(
-              badgeContent: const Text('3', style: TextStyle(color: Colors.white, fontSize: 10)),
-              child: const Icon(Icons.notifications_outlined, color: Colors.white),
-            ),
-            onPressed: () {
-               // Handle notifications
+          child: FutureBuilder<int>(
+            future: context.read<AuthProvider>().user != null 
+                ? ApiService().getUnreadNotificationsCount() 
+                : Future.value(0),
+            builder: (context, snapshot) {
+              final unreadCount = snapshot.data ?? 0;
+              
+              return IconButton(
+                icon: unreadCount > 0
+                    ? badges.Badge(
+                        badgeContent: Text(
+                          unreadCount > 99 ? '99+' : '$unreadCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 10),
+                        ),
+                        child: const Icon(Icons.notifications_outlined, color: Colors.white),
+                      )
+                    : const Icon(Icons.notifications_outlined, color: Colors.white),
+                onPressed: () {
+                  context.push('/notifications');
+                },
+              );
             },
           ),
         ),

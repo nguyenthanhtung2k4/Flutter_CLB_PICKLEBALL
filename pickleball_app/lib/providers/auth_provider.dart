@@ -67,6 +67,10 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> refreshUser() async {
+    await fetchUserDetails();
+  }
+
   Future<bool> checkAuthStatus() async {
     _setLoading(true);
     final token = await _apiService.getToken();

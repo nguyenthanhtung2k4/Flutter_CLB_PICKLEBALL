@@ -21,6 +21,7 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
       public DbSet<Notification> Notifications { get; set; }
       public DbSet<TransactionCategory> TransactionCategories { get; set; }
       public DbSet<News> News { get; set; }
+      public DbSet<RankHistory> RankHistories { get; set; }
 
       protected override void OnModelCreating(ModelBuilder builder)
       {
@@ -37,6 +38,7 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
             builder.Entity<TournamentParticipant>().ToTable("729_TournamentParticipants");
             builder.Entity<Match>().ToTable("729_Matches");
             builder.Entity<Notification>().ToTable("729_Notifications");
+            builder.Entity<RankHistory>().ToTable("729_RankHistories");
 
             // Configure relationships/constraints if needed
             builder.Entity<Booking>()

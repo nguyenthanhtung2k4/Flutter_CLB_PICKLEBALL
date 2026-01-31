@@ -116,6 +116,97 @@ class ApiService {
     }
   }
 
+  // Tournament APIs
+  Future<List<dynamic>> getTournaments({String? status}) async {
+    try {
+      final response = await _dio.get('/tournaments', queryParameters: {
+        if (status != null) 'status': status,
+      });
+      return response.data['data'] ?? response.data;
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> joinTournament(int tournamentId, {String? teamName}) async {
+    try {
+      await _dio.post('/tournaments/$tournamentId/join', queryParameters: {
+        if (teamName != null) 'teamName': teamName,
+      });
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<dynamic> getTournamentDetail(int tournamentId) async {
+    try {
+      final response = await _dio.get('/tournaments/$tournamentId');
+      return response.data;
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // Wallet APIs
+  Future<void> depositWallet(double amount, String? description, {String? proofImageUrl}) async {
+    try {
+      await _dio.post('/wallet/deposit', data: {
+        'amount': amount,
+        'description': description ?? 'Nạp tiền vào ví',
+        'proofImageUrl': proofImageUrl,
+      });
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<List<dynamic>> getWalletTransactions() async {
+    try {
+      final response = await _dio.get('/wallet/transactions');
+      return response.data is List ? response.data : (response.data['data'] ?? []);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // Notifications APIs
+  Future<Map<String, dynamic>> getNotifications({int page = 1, int pageSize = 20}) async {
+    try {
+      final response = await _dio.get('/notifications', queryParameters: {
+        'page': page,
+        'pageSize': pageSize,
+      });
+      return response.data;
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> markNotificationAsRead(int notificationId) async {
+    try {
+      await _dio.put('/notifications/$notificationId/read');
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> markAllNotificationsAsRead() async {
+    try {
+      await _dio.put('/notifications/read-all');
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<int> getUnreadNotificationsCount() async {
+    try {
+      final response = await _dio.get('/notifications/unread-count');
+      return response.data['unreadCount'] ?? 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
   // Storage helpers
   Future<void> saveToken(String token) async {
     await _storage.write(key: AppConfig.tokenKey, value: token);

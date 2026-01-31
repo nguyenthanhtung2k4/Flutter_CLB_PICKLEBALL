@@ -13,6 +13,8 @@ public class Notification
       [ForeignKey("ReceiverId")]
       public virtual Member? Receiver { get; set; }
 
+      public string? Title { get; set; }
+
       [Required]
       public string Message { get; set; } = string.Empty;
 

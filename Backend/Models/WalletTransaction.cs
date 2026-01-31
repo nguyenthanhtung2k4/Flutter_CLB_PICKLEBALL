@@ -24,5 +24,7 @@ public class WalletTransaction
 
       public string? Description { get; set; }
 
+      public string? ProofImageUrl { get; set; } // URL ảnh chuyển khoản (cho Deposit)
+
       public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
 }

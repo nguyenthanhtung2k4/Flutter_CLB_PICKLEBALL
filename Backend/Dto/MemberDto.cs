@@ -19,3 +19,21 @@ public class MemberProfileDto : MemberDto
       public decimal TotalSpent { get; set; }
       // Add more profile specific fields
 }
+
+public class RankHistoryDto
+{
+      public int Id { get; set; }
+      public double OldRank { get; set; }
+      public double NewRank { get; set; }
+      public DateTime ChangedDate { get; set; }
+      public string? Reason { get; set; }
+      public int? MatchId { get; set; }
+}
+
+public class MemberProfileDetailDto
+{
+      public MemberProfileDto? Member { get; set; }
+      public List<RankHistoryDto> RankHistory { get; set; } = new();
+      public List<object> RecentMatches { get; set; } = new(); // Will be Match objects
+}
+
