@@ -9,6 +9,7 @@ class UserModel {
   final String tier;
   final double rankLevel;
   final String role;
+  final List<String> roles;
 
   UserModel({
     required this.id,
@@ -20,10 +21,14 @@ class UserModel {
     this.avatarUrl,
     required this.tier,
     required this.rankLevel,
-    this.role = 'User',
+    this.role = 'Customer',
+    this.roles = const [],
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    final roles = (json['roles'] as List?)?.map((e) => e.toString()).toList() ?? [];
+    final isAdmin = roles.contains('Admin');
+
     return UserModel(
       id: json['id'] ?? '',
       username: json['userName'] ?? json['username'] ?? '',
@@ -34,7 +39,8 @@ class UserModel {
       avatarUrl: json['avatarUrl'],
       tier: json['tier']?.toString() ?? 'Standard',
       rankLevel: (json['rankLevel'] ?? 0.0).toDouble(),
-      role: json['roles'] != null && (json['roles'] as List).contains('Admin') ? 'Admin' : 'User',
+      role: isAdmin ? 'Admin' : 'Customer',
+      roles: roles,
     );
   }
 

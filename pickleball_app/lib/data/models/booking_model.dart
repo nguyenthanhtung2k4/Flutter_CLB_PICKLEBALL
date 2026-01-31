@@ -4,8 +4,10 @@ class BookingModel {
   final String courtName;
   final DateTime startTime;
   final DateTime endTime;
-  final int status; // 0: Pending, 1: Confirmed, 2: Cancelled (Mapped from enum if needed)
+  final int status; // 0: Pending, 1: Confirmed, 2: Cancelled, 3: Completed, 4: Holding
   final String memberName;
+  final int memberId;
+  final DateTime? holdUntil;
 
   BookingModel({
     required this.id,
@@ -15,6 +17,8 @@ class BookingModel {
     required this.endTime,
     required this.status,
     required this.memberName,
+    required this.memberId,
+    this.holdUntil,
   });
 
   factory BookingModel.fromJson(Map<String, dynamic> json) {
@@ -26,6 +30,8 @@ class BookingModel {
       endTime: DateTime.parse(json['endTime']),
       status: json['status'],
       memberName: json['memberName'] ?? '',
+      memberId: json['memberId'] ?? 0,
+      holdUntil: json['holdUntil'] != null ? DateTime.tryParse(json['holdUntil']) : null,
     );
   }
 }

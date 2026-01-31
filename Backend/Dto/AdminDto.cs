@@ -44,3 +44,11 @@ public class PendingDepositDto
       public string? ProofImageUrl { get; set; }
       public DateTime CreatedDate { get; set; }
 }
+
+public class CreateAdminMemberDto
+{
+      public string Username { get; set; } = string.Empty;
+      public string Email { get; set; } = string.Empty;
+      public string Password { get; set; } = string.Empty;
+      public string? FullName { get; set; }
+}

@@ -32,5 +32,8 @@ public class Booking
       public string? RecurrenceRule { get; set; } // e.g., "Weekly;Tue,Thu"
       public int? ParentBookingId { get; set; }
 
+      // Hold Slot (5 minutes)
+      public DateTime? HoldUntil { get; set; }
+
       public BookingStatus Status { get; set; } = BookingStatus.PendingPayment;
 }

@@ -1,6 +1,9 @@
 using Backend.Data;
+using Backend.Dto;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Backend.Controllers;
 
@@ -62,11 +65,60 @@ public class MembersController : ControllerBase
                 .Take(10)
                 .ToListAsync();
 
+            var rankHistory = await _context.RankHistories
+                .Where(r => r.MemberId == id)
+                .OrderByDescending(r => r.ChangedDate)
+                .Take(20)
+                .Select(r => new RankHistoryDto
+                {
+                      Id = r.Id,
+                      OldRank = r.OldRank,
+                      NewRank = r.NewRank,
+                      ChangedDate = r.ChangedDate,
+                      Reason = r.Reason,
+                      MatchId = r.MatchId
+                })
+                .ToListAsync();
+
             return Ok(new
             {
                   Member = member,
                   RecentMatches = matches,
-                  // RankHistory = ... (Not implemented yet, would need a separate table or logs)
+                  RankHistory = rankHistory
             });
+      }
+
+      // GET /api/members/me/profile
+      [HttpGet("me/profile")]
+      [Authorize]
+      public async Task<IActionResult> GetMyProfile()
+      {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var member = await _context.Members.FirstOrDefaultAsync(m => m.UserId == userId);
+            if (member == null) return NotFound("Member not found.");
+
+            return await GetProfile(member.Id);
+      }
+
+      // PUT /api/members/me
+      [HttpPut("me")]
+      [Authorize]
+      public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateMemberProfileDto request)
+      {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var member = await _context.Members.FirstOrDefaultAsync(m => m.UserId == userId);
+            if (member == null) return NotFound("Member not found.");
+
+            if (!string.IsNullOrWhiteSpace(request.FullName))
+            {
+                  member.FullName = request.FullName.Trim();
+            }
+            if (request.AvatarUrl != null)
+            {
+                  member.AvatarUrl = request.AvatarUrl;
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Profile updated successfully." });
       }
 }

@@ -15,6 +15,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final ApiService _api = ApiService();
+  late Future<Map<String, dynamic>> _profileFuture;
+  late Future<List<dynamic>> _upcomingMatchesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileFuture = _api.getMyProfile();
+    _upcomingMatchesFuture = _api.getUpcomingMatches();
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -36,7 +46,25 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       _buildSectionTitle('Thống kê hạng (Rank)'),
                       const SizedBox(height: 12),
-                      _buildRankChart(),
+                      FutureBuilder<Map<String, dynamic>>(
+                        future: _profileFuture,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const SizedBox(
+                              height: 220,
+                              child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                            );
+                          }
+
+                          if (snapshot.hasError) {
+                            return _buildRankChart(_buildRankSpots([], user.rankLevel));
+                          }
+
+                          final data = snapshot.data ?? {};
+                          final history = (data['rankHistory'] as List?) ?? [];
+                          return _buildRankChart(_buildRankSpots(history, user.rankLevel));
+                        },
+                      ),
                       const SizedBox(height: 24),
                       _buildSectionTitle('Lịch thi đấu sắp tới'),
                       const SizedBox(height: 12),
@@ -143,7 +171,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRankChart() {
+  Widget _buildRankChart(List<FlSpot> spots) {
     return Container(
       height: 220,
       padding: const EdgeInsets.all(16),
@@ -183,15 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
           maxY: 6,
           lineBarsData: [
             LineChartBarData(
-              spots: const [
-                FlSpot(0, 3),
-                FlSpot(1, 1),
-                FlSpot(2, 4),
-                FlSpot(3, 2),
-                FlSpot(4, 5),
-                FlSpot(5, 3),
-                FlSpot(6, 4),
-              ],
+              spots: spots.isEmpty ? const [FlSpot(0, 0)] : spots,
               isCurved: true,
               color: AppColors.primary,
               barWidth: 3,
@@ -208,56 +228,114 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildUpcomingMatchesList() {
-    // Mock Data
-    final matches = List.generate(3, (index) => index);
+  List<FlSpot> _buildRankSpots(List<dynamic> history, double fallbackRank) {
+    if (history.isEmpty) {
+      return [FlSpot(0, fallbackRank)];
+    }
 
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
-            child: Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(12),
-                leading: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryLight.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
+    final items = history.reversed.toList();
+    final maxPoints = items.length > 7 ? 7 : items.length;
+    final List<FlSpot> spots = [];
+
+    for (int i = 0; i < maxPoints; i++) {
+      final item = items[i] as Map<String, dynamic>;
+      final value = (item['newRank'] ?? item['NewRank'] ?? fallbackRank).toDouble();
+      spots.add(FlSpot(i.toDouble(), value));
+    }
+
+    return spots;
+  }
+
+  Widget _buildUpcomingMatchesList() {
+    return SliverToBoxAdapter(
+      child: FutureBuilder<List<dynamic>>(
+        future: _upcomingMatchesFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+            );
+          }
+
+          if (snapshot.hasError) {
+            return const Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Center(child: Text('Không tải được lịch thi đấu.')),
+            );
+          }
+
+          final matches = snapshot.data ?? [];
+          if (matches.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Center(child: Text('Chưa có lịch thi đấu sắp tới.')),
+            );
+          }
+
+          return Column(
+            children: matches.map((m) {
+              final map = m as Map<String, dynamic>;
+              final title = map['tournamentName'] ?? 'Trận đấu';
+              final round = map['roundName'] ?? '';
+              final start = map['startDateTime'] ?? '';
+              final team1 = (map['team1'] as List?)?.join(', ') ?? '';
+              final team2 = (map['team2'] as List?)?.join(', ') ?? '';
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+                child: Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.all(12),
+                    leading: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.sports_tennis, color: AppColors.primary),
+                      ),
+                    ),
+                    title: Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 4),
+                        Text('${_formatDateTime(start)} ${round.isNotEmpty ? "- $round" : ""}'),
+                        const SizedBox(height: 2),
+                        Text('$team1 vs. $team2', style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                    trailing: Chip(
+                      label: const Text('Sắp đấu', style: TextStyle(color: Colors.white, fontSize: 10)),
+                      backgroundColor: AppColors.warning,
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
-                  child: const Center(
-                    child: Icon(Icons.sports_tennis, color: AppColors.primary),
-                  ),
                 ),
-                title: const Text(
-                  'Giải Vô Địch Mở Rộng 2024',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(height: 4),
-                    Text('San A - 18:00 24/11/2026'),
-                    SizedBox(height: 2),
-                    Text('vs. Team Avengers', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w500)),
-                  ],
-                ),
-                trailing: Chip(
-                  label: const Text('Sắp đấu', style: TextStyle(color: Colors.white, fontSize: 10)),
-                  backgroundColor: AppColors.warning,
-                  padding: EdgeInsets.zero,
-                  visualDensity: VisualDensity.compact, 
-                ),
-              ),
-            ),
+              );
+            }).toList(),
           );
         },
-        childCount: 3,
       ),
     );
+  }
+
+  String _formatDateTime(String dateStr) {
+    if (dateStr.isEmpty) return '';
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return dateStr;
+    }
   }
 }

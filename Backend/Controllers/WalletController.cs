@@ -2,7 +2,9 @@ using Backend.Data;
 using Backend.Enums;
 using Backend.Models;
 using Backend.Dto;
+using Backend.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -14,16 +16,21 @@ namespace Backend.Controllers;
 public class WalletController : ControllerBase
 {
       private readonly AppDbContext _context;
+      private readonly NotificationService _notificationService;
+      private readonly IWebHostEnvironment _env;
 
-      public WalletController(AppDbContext context)
+      public WalletController(AppDbContext context, NotificationService notificationService, IWebHostEnvironment env)
       {
             _context = context;
+            _notificationService = notificationService;
+            _env = env;
       }
 
       // POST /api/wallet/deposit
       [HttpPost("deposit")]
       [Authorize] // Require login
-      public async Task<IActionResult> Deposit([FromBody] DepositRequestDto request)
+      [RequestSizeLimit(10_000_000)]
+      public async Task<IActionResult> Deposit([FromForm] DepositRequestFormDto request)
       {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             // Find member by Identity UserId
@@ -32,6 +39,27 @@ public class WalletController : ControllerBase
 
             if (request.Amount <= 0) return BadRequest("Amount must be greater than 0.");
 
+            string? proofUrl = request.ProofImageUrl;
+            if (request.ProofImage != null)
+            {
+                  var uploadsRoot = Path.Combine(_env.WebRootPath ?? "wwwroot", "uploads");
+                  Directory.CreateDirectory(uploadsRoot);
+
+                  var fileName = $"{Guid.NewGuid()}_{Path.GetFileName(request.ProofImage.FileName)}";
+                  var filePath = Path.Combine(uploadsRoot, fileName);
+                  await using (var stream = new FileStream(filePath, FileMode.Create))
+                  {
+                        await request.ProofImage.CopyToAsync(stream);
+                  }
+
+                  proofUrl = $"/uploads/{fileName}";
+            }
+
+            if (string.IsNullOrWhiteSpace(proofUrl))
+            {
+                  return BadRequest("Proof image is required.");
+            }
+
             var transaction = new WalletTransaction
             {
                   MemberId = member.Id,
@@ -39,7 +67,7 @@ public class WalletController : ControllerBase
                   Type = TransactionType.Deposit,
                   Status = TransactionStatus.Pending,
                   Description = "Nạp tiền vào ví: " + request.Description,
-                  // In a real app, handle ProofImage upload logic here or accept a URL
+                  ProofImageUrl = proofUrl,
                   CreatedDate = DateTime.UtcNow
             };
 
@@ -70,7 +98,7 @@ public class WalletController : ControllerBase
       // Note: This route structure implies it might be better in an Admin controller, but passing here is fine for now.
       // Ideally use [Route("/api/admin/wallet/approve/{id}")]
       [HttpPut("/api/admin/wallet/approve/{id}")]
-      // [Authorize(Roles = "Admin")] // Uncomment when roles are set up
+      [Authorize(Roles = "Admin")]
       public async Task<IActionResult> ApproveDeposit(int id)
       {
             var transaction = await _context.WalletTransactions.FindAsync(id);
@@ -91,6 +119,14 @@ public class WalletController : ControllerBase
 
             // Save
             await _context.SaveChangesAsync();
+
+            await _notificationService.NotifyMemberAsync(
+                  member,
+                  $"Náº¡p tiá»n thÃ nh cÃ´ng: +{transaction.Amount:n0} VNÄ",
+                  NotificationType.Success,
+                  "Náº¡p tiá»n thÃ nh cÃ´ng",
+                  "/wallet"
+            );
 
             return Ok(new { Message = "Transaction approved and funds added.", NewBalance = member.WalletBalance });
       }

@@ -9,6 +9,12 @@ public class CreateBookingDto
       public DateTime EndTime { get; set; }
 }
 
+public class HoldBookingDto : CreateBookingDto
+{
+      // Hold duration in minutes (optional, default 5)
+      public int HoldMinutes { get; set; } = 5;
+}
+
 public class RecurringBookingDto : CreateBookingDto
 {
       // "Daily", "Weekly"
@@ -26,4 +32,6 @@ public class BookingDto
       public DateTime EndTime { get; set; }
       public BookingStatus Status { get; set; }
       public string MemberName { get; set; } = string.Empty;
+      public int MemberId { get; set; }
+      public DateTime? HoldUntil { get; set; }
 }

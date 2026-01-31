@@ -1,10 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/constants/app_colors.dart';
 import '../../data/services/api_service.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import 'dart:io';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -20,6 +21,7 @@ class _WalletScreenState extends State<WalletScreen> {
   Future<void> _showDepositDialog() async {
     final amountController = TextEditingController();
     XFile? transferImage;
+    Uint8List? transferImageBytes;
 
     await showModalBottomSheet(
       context: context,
@@ -62,8 +64,10 @@ class _WalletScreenState extends State<WalletScreen> {
                     onTap: () async {
                       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
                       if (image != null) {
+                        final bytes = await image.readAsBytes();
                         setModalState(() {
                           transferImage = image;
+                          transferImageBytes = bytes;
                         });
                       }
                     },
@@ -74,11 +78,11 @@ class _WalletScreenState extends State<WalletScreen> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.grey[400]!),
                       ),
-                      child: transferImage != null
+                      child: transferImageBytes != null
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: Image.file(
-                                File(transferImage!.path),
+                              child: Image.memory(
+                                transferImageBytes!,
                                 fit: BoxFit.cover,
                               ),
                             )
@@ -118,7 +122,7 @@ class _WalletScreenState extends State<WalletScreen> {
                         return;
                       }
 
-                      if (transferImage == null) {
+                      if (transferImage == null || transferImageBytes == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Vui lòng tải ảnh chuyển khoản!'),
@@ -131,14 +135,11 @@ class _WalletScreenState extends State<WalletScreen> {
                       try {
                         Navigator.pop(context);
                         
-                        // For now, send the local path as proofImageUrl
-                        // In a real app, you'd upload to server/cloud first and get URL
-                        final proofUrl = transferImage!.path;
-
                         await _api.depositWallet(
                           amount,
                           'Nạp tiền qua ứng dụng',
-                          proofImageUrl: proofUrl,
+                          proofImageBytes: transferImageBytes,
+                          proofImageName: transferImage!.name,
                         );
 
                         if (!mounted) return;
@@ -341,14 +342,20 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Widget _buildTransactionItem(Map<String, dynamic> transaction) {
-    final type = transaction['type'] ?? 0; // 0=Deposit, 1=Payment, 2=Refund
+    final type = transaction['type'] ?? 0; // 0=Deposit, 1=Withdraw, 2=Payment, 3=Refund, 4=Reward
     final amount = (transaction['amount'] ?? 0.0).toDouble();
-    final status = transaction['status'] ?? 0; // 0=Pending, 1=Completed, 2=Failed
+    final status = transaction['status'] ?? 0; // 0=Pending, 1=Completed, 2=Rejected, 3=Failed
     final description = transaction['description'] ?? '';
     final createdDate = transaction['createdDate'] ?? '';
 
-    final bool isIncome = type == 0 || type == 2; // Deposit or Refund
-    final String statusText = status == 0 ? 'Chờ duyệt' : (status == 1 ? 'Hoàn tất' : 'Thất bại');
+    final bool isIncome = type == 0 || type == 3 || type == 4; // Deposit, Refund, Reward
+    final String statusText = status == 0
+        ? 'Chờ duyệt'
+        : status == 1
+            ? 'Hoàn tất'
+            : status == 2
+                ? 'Từ chối'
+                : 'Thất bại';
     final Color statusColor = status == 0 ? Colors.orange : (status == 1 ? Colors.green : Colors.red);
 
     return Container(

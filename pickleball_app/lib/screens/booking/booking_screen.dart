@@ -19,6 +19,7 @@ class BookingScreen extends StatefulWidget {
 class _BookingScreenState extends State<BookingScreen> {
   final ApiService _api = ApiService();
   final SignalRService _signalR = SignalRService();
+  bool _signalRInitialized = false;
   
   CalendarFormat _calendarFormat = CalendarFormat.week;
   DateTime _focusedDay = DateTime.now();
@@ -40,21 +41,14 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _initSignalR(AuthProvider authProvider) async {
-    // Assuming you have a way to get baseUrl. For now hardcode or use config
-    // Actually SignalRService needs baseUrl. 
-    // We can get token from ApiService logic or AuthProvider if it exposed token (it doesn't directly).
-    // Let's us AppConfig.baseUrl
+    if (_signalRInitialized) return;
     final token = await _api.getToken();
     if (token != null) {
       await _signalR.init(AppConfig.baseUrl, token);
-      // Note: for real device use specific IP. standard localhost port.
-      // User is on Windows dev, so maybe localhost is fine for web/windows app.
-      // But for Android emulator 10.0.2.2 is needed. 
-      // Let's assume Windows/Web for now or use a config. 
-      
       _signalR.listenToBookingUpdates((data) {
         _fetchBookings(); // Refresh on update
       });
+      _signalRInitialized = true;
     }
   }
 
@@ -90,6 +84,7 @@ class _BookingScreenState extends State<BookingScreen> {
   List<Map<String, dynamic>> _generateSlotsForDay(DateTime date) {
     List<Map<String, dynamic>> slots = [];
     if (_courts.isEmpty) return slots;
+    final now = DateTime.now();
     
     // Operating hours: 7:00 - 22:00
     for (var court in _courts) {
@@ -103,15 +98,33 @@ class _BookingScreenState extends State<BookingScreen> {
                  b.startTime.isBefore(slotEnd) && 
                  b.endTime.isAfter(slotStart) &&
                  b.status != 2, // Not cancelled
-          orElse: () => BookingModel(id: -1, courtId: -1, courtName: '', startTime: DateTime(2000), endTime: DateTime(2000), status: -1, memberName: ''),
+          orElse: () => BookingModel(
+            id: -1,
+            courtId: -1,
+            courtName: '',
+            startTime: DateTime(2000),
+            endTime: DateTime(2000),
+            status: -1,
+            memberName: '',
+            memberId: -1,
+            holdUntil: null,
+          ),
         );
 
         int status = 0; // Free
         if (booking.id != -1) {
-           // Check if it's mine
-           final myName = Provider.of<AuthProvider>(context, listen: false).user?.fullName;
-           if (booking.memberName == myName) status = 2; // Mine
-           else status = 1; // Booked
+           final authUser = Provider.of<AuthProvider>(context, listen: false).user;
+           final isMine = authUser != null && booking.memberId == authUser.memberId;
+           if (booking.status == 4) {
+             status = isMine ? 3 : 4; // Holding by me / others
+           } else {
+             status = isMine ? 2 : 1; // Mine / Booked
+           }
+        }
+
+        // Past slot: disable booking
+        if (slotStart.isBefore(now)) {
+          status = 5;
         }
 
         slots.add({
@@ -130,14 +143,20 @@ class _BookingScreenState extends State<BookingScreen> {
     switch (status) {
       case 1: return Colors.red.shade100;
       case 2: return Colors.green.shade100;
+      case 3: return Colors.blue.shade100;
+      case 4: return Colors.orange.shade100;
+      case 5: return Colors.grey.shade200;
       default: return Colors.white;
     }
   }
 
   Color _getSlotBorderColor(int status) {
-     switch (status) {
+   switch (status) {
       case 1: return Colors.red;
       case 2: return Colors.green;
+      case 3: return Colors.blue;
+      case 4: return Colors.orange;
+      case 5: return Colors.grey;
       default: return Colors.grey.shade300;
     }
   }
@@ -146,69 +165,134 @@ class _BookingScreenState extends State<BookingScreen> {
     switch (status) {
       case 1: return 'Đã đặt';
       case 2: return 'Của bạn';
+      case 3: return 'Bạn đang giữ';
+      case 4: return 'Đang giữ';
+      case 5: return 'Đã qua';
       default: return 'Trống';
     }
   }
 
-  void _showBookingBottomSheet(Map<String, dynamic> slot) {
+  void _showBookingBottomSheet(Map<String, dynamic> slot) async {
+    if (slot['status'] == 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Giờ đã qua, vui lòng chọn khung giờ khác.')),
+      );
+      return;
+    }
     if (slot['status'] != 0) return;
 
     final CourtModel court = slot['court'];
     final timeStr = slot['time'];
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final balance = authProvider.user?.walletBalance ?? 0;
+    final durationMinutes = (slot['end'] as DateTime).difference(slot['start'] as DateTime).inMinutes;
+    final totalPrice = (durationMinutes / 60) * court.pricePerHour;
+    final hasEnoughBalance = balance >= totalPrice;
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Đặt sân - ${court.name}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              Row(children: [
-                const Icon(Icons.access_time, size: 20, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text('Thời gian: $timeStr - ${_calculateEndTime(timeStr)}'),
-              ]),
-              const SizedBox(height: 8),
-               Row(children: [
-                const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text('Ngày: ${_selectedDay.toString().split(' ')[0]}'),
-              ]),
-               const SizedBox(height: 24),
-               const Text('Chi phí:', style: TextStyle(fontWeight: FontWeight.bold)),
-               Text('${court.pricePerHour.toStringAsFixed(0)} VNĐ', style: const TextStyle(fontSize: 18, color: AppColors.primary)),
-               const SizedBox(height: 32),
-               SizedBox(
-                 width: double.infinity,
-                 child: ElevatedButton(
-                   onPressed: () async {
-                     try {
-                        Navigator.pop(context); // Close sheet first
-                        await _api.createBooking(court.id, slot['start'], slot['end']);
+    try {
+      final holdResponse = await _api.holdBooking(court.id, slot['start'], slot['end']);
+      final holdId = holdResponse['holdId'] ?? holdResponse['HoldId'];
+      final holdUntilRaw = holdResponse['holdUntil'] ?? holdResponse['HoldUntil'];
+      final holdUntil = holdUntilRaw != null ? DateTime.tryParse(holdUntilRaw.toString()) : null;
+
+      if (holdId == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Không giữ được slot. Vui lòng thử lại.')),
+        );
+        return;
+      }
+
+      bool confirmed = false;
+
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (context) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Đặt sân - ${court.name}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                Row(children: [
+                  const Icon(Icons.access_time, size: 20, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Text('Thời gian: $timeStr - ${_calculateEndTime(timeStr)}'),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Text('Ngày: ${_selectedDay.toString().split(' ')[0]}'),
+                ]),
+                if (holdUntil != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Giữ chỗ đến: ${holdUntil.hour.toString().padLeft(2, '0')}:${holdUntil.minute.toString().padLeft(2, '0')}',
+                    style: const TextStyle(color: Colors.orange, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                const Text('Chi phí:', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('${totalPrice.toStringAsFixed(0)} VNĐ', style: const TextStyle(fontSize: 18, color: AppColors.primary)),
+                const SizedBox(height: 8),
+                Text('Số dư hiện tại: ${balance.toStringAsFixed(0)} VNĐ'),
+                if (!hasEnoughBalance)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Số dư không đủ, vui lòng nạp thêm tiền.',
+                      style: TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                  ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: hasEnoughBalance ? () async {
+                      try {
+                        await _api.confirmBooking(holdId);
+                        confirmed = true;
+                        if (!mounted) return;
+                        Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đặt sân thành công!')));
                         _fetchBookings(); // Refresh
-                     } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
-                     }
-                   },
-                   style: ElevatedButton.styleFrom(
-                     backgroundColor: AppColors.primary,
-                     padding: const EdgeInsets.symmetric(vertical: 16),
-                   ),
-                   child: const Text('Xác nhận đặt sân', style: TextStyle(color: Colors.white)),
-                 ),
-               ),
-            ],
-          ),
-        );
-      },
-    );
+                        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                        await authProvider.refreshUser();
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+                        );
+                      }
+                    } : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: const Text('Xác nhận đặt sân', style: TextStyle(color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      if (!confirmed) {
+        await _api.releaseHold(holdId);
+        _fetchBookings();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+      );
+    }
   }
   
   String _calculateEndTime(String startTime) {
@@ -216,12 +300,229 @@ class _BookingScreenState extends State<BookingScreen> {
     return '${(hour + 1).toString().padLeft(2, '0')}:00';
   }
 
+  void _showRecurringBookingSheet() {
+    if (_courts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chưa có sân để đặt lịch định kỳ.')),
+      );
+      return;
+    }
+
+    CourtModel selectedCourt = _courts.first;
+    DateTime startDate = _selectedDay ?? DateTime.now();
+    DateTime recurUntil = startDate.add(const Duration(days: 30));
+    TimeOfDay startTime = const TimeOfDay(hour: 18, minute: 0);
+    TimeOfDay endTime = const TimeOfDay(hour: 19, minute: 0);
+    final Set<int> selectedDays = {};
+
+    final dayOptions = const [
+      {'label': 'T2', 'value': 1},
+      {'label': 'T3', 'value': 2},
+      {'label': 'T4', 'value': 3},
+      {'label': 'T5', 'value': 4},
+      {'label': 'T6', 'value': 5},
+      {'label': 'T7', 'value': 6},
+      {'label': 'CN', 'value': 0},
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 24,
+                right: 24,
+                top: 24,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Đặt lịch định kỳ', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<CourtModel>(
+                      value: selectedCourt,
+                      decoration: const InputDecoration(labelText: 'Chọn sân'),
+                      items: _courts.map((c) {
+                        return DropdownMenuItem(value: c, child: Text(c.name));
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) setModalState(() => selectedCourt = value);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Ngày bắt đầu'),
+                      subtitle: Text('${startDate.day}/${startDate.month}/${startDate.year}'),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: startDate,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (picked != null) setModalState(() => startDate = picked);
+                      },
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Giờ bắt đầu'),
+                      subtitle: Text('${startTime.format(context)}'),
+                      trailing: const Icon(Icons.access_time),
+                      onTap: () async {
+                        final picked = await showTimePicker(context: context, initialTime: startTime);
+                        if (picked != null) setModalState(() => startTime = picked);
+                      },
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Giờ kết thúc'),
+                      subtitle: Text('${endTime.format(context)}'),
+                      trailing: const Icon(Icons.access_time),
+                      onTap: () async {
+                        final picked = await showTimePicker(context: context, initialTime: endTime);
+                        if (picked != null) setModalState(() => endTime = picked);
+                      },
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Lặp đến ngày'),
+                      subtitle: Text('${recurUntil.day}/${recurUntil.month}/${recurUntil.year}'),
+                      trailing: const Icon(Icons.calendar_month),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: recurUntil,
+                          firstDate: startDate,
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (picked != null) setModalState(() => recurUntil = picked);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Chọn ngày lặp', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Wrap(
+                      spacing: 8,
+                      children: dayOptions.map((d) {
+                        final value = d['value'] as int;
+                        final selected = selectedDays.contains(value);
+                        return FilterChip(
+                          label: Text(d['label'] as String),
+                          selected: selected,
+                          onSelected: (val) {
+                            setModalState(() {
+                              if (val) {
+                                selectedDays.add(value);
+                              } else {
+                                selectedDays.remove(value);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          if (selectedDays.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Vui lòng chọn ngày lặp.')),
+                            );
+                            return;
+                          }
+
+                          final startDateTime = DateTime(
+                            startDate.year,
+                            startDate.month,
+                            startDate.day,
+                            startTime.hour,
+                            startTime.minute,
+                          );
+                          final endDateTime = DateTime(
+                            startDate.year,
+                            startDate.month,
+                            startDate.day,
+                            endTime.hour,
+                            endTime.minute,
+                          );
+
+                          if (endDateTime.isBefore(startDateTime)) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Giờ kết thúc phải sau giờ bắt đầu.')),
+                            );
+                            return;
+                          }
+
+                          try {
+                            await _api.createRecurringBooking(
+                              courtId: selectedCourt.id,
+                              startTime: startDateTime,
+                              endTime: endDateTime,
+                              recurUntil: recurUntil,
+                              daysOfWeek: selectedDays.toList(),
+                            );
+                            if (!mounted) return;
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đặt lịch định kỳ thành công!')),
+                            );
+                            _fetchBookings();
+                            final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                            await authProvider.refreshUser();
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text('Xác nhận', style: TextStyle(color: Colors.white)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+    final isVip = authProvider.user != null &&
+        (authProvider.user!.tier.toLowerCase() == 'gold' || authProvider.user!.tier.toLowerCase() == 'diamond');
     final slots = _selectedDay != null ? _generateSlotsForDay(_selectedDay!) : [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Lịch đặt sân'), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('Lịch đặt sân'),
+        centerTitle: true,
+        actions: [
+          if (isVip)
+            IconButton(
+              onPressed: _showRecurringBookingSheet,
+              icon: const Icon(Icons.repeat),
+              tooltip: 'Đặt lịch định kỳ',
+            ),
+        ],
+      ),
       body: Column(
         children: [
           TableCalendar(

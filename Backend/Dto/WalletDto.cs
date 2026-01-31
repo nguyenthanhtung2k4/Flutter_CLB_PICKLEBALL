@@ -1,9 +1,19 @@
+using Microsoft.AspNetCore.Http;
+
 namespace Backend.Dto;
 
 public class DepositRequestDto
 {
       public decimal Amount { get; set; }
       public string? Description { get; set; }
+      public string? ProofImageUrl { get; set; }
+}
+
+public class DepositRequestFormDto
+{
+      public decimal Amount { get; set; }
+      public string? Description { get; set; }
+      public IFormFile? ProofImage { get; set; }
       public string? ProofImageUrl { get; set; }
 }
 

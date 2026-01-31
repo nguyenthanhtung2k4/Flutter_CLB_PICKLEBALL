@@ -3,6 +3,7 @@ import '../../core/constants/app_colors.dart';
 import '../../data/services/api_service.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import 'tournament_detail_screen.dart';
 
 class TournamentScreen extends StatefulWidget {
   const TournamentScreen({super.key});
@@ -118,34 +119,31 @@ class _TournamentScreenState extends State<TournamentScreen> with SingleTickerPr
     final startDate = tournament['startDate'] ?? '';
     final endDate = tournament['endDate'] ?? '';
     final currentParticipants = tournament['currentParticipants'] ?? 0;
-    final maxParticipants = tournament['maxParticipants'] ?? 0;
+    final maxParticipants = tournament['maxParticipants'];
     final entryFee = (tournament['entryFee'] ?? 0.0).toDouble();
-    final format = tournament['format'] ?? 'Singles';
-    final imageUrl = tournament['imageUrl'];
+    final format = _formatTournamentFormat(tournament['format']);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => TournamentDetailScreen(tournamentId: id)),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 16),
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           Container(
             height: 120,
             decoration: BoxDecoration(
               color: Colors.grey.shade200,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              image: imageUrl != null
-                  ? DecorationImage(
-                      image: NetworkImage(imageUrl),
-                      fit: BoxFit.cover,
-                      onError: (_, __) {},
-                    )
-                  : null,
             ),
-            child: imageUrl == null
-                ? const Center(child: Icon(Icons.emoji_events, size: 50, color: Colors.grey))
-                : null,
+            child: const Center(child: Icon(Icons.emoji_events, size: 50, color: Colors.grey)),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -172,7 +170,10 @@ class _TournamentScreenState extends State<TournamentScreen> with SingleTickerPr
                   children: [
                     const Icon(Icons.people, size: 16, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text('$currentParticipants/$maxParticipants', style: const TextStyle(color: Colors.grey)),
+                    Text(
+                      maxParticipants != null ? '$currentParticipants/$maxParticipants' : '$currentParticipants',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
                     const Spacer(),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -215,7 +216,8 @@ class _TournamentScreenState extends State<TournamentScreen> with SingleTickerPr
               ],
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -228,6 +230,22 @@ class _TournamentScreenState extends State<TournamentScreen> with SingleTickerPr
     } catch (e) {
       return dateStr;
     }
+  }
+
+  String _formatTournamentFormat(dynamic format) {
+    if (format is int) {
+      switch (format) {
+        case 0:
+          return 'Round Robin';
+        case 1:
+          return 'Knockout';
+        case 2:
+          return 'Hybrid';
+        default:
+          return 'Unknown';
+      }
+    }
+    return format?.toString() ?? 'Unknown';
   }
 
   void _showJoinDialog(int tournamentId, String name, double fee) {

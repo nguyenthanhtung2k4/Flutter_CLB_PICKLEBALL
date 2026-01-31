@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../data/models/user_model.dart';
 import '../data/services/api_service.dart';
+import '../core/config/app_config.dart';
+import '../servicers/signalr_service.dart';
 
 class AuthProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
+  final SignalRService _signalRService = SignalRService();
   
   UserModel? _user;
   bool _isLoading = false;
@@ -14,6 +17,7 @@ class AuthProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _isAuthenticated;
+  SignalRService get signalR => _signalRService;
 
   Future<bool> login(String username, String password) async {
     _setLoading(true);
@@ -25,6 +29,8 @@ class AuthProvider with ChangeNotifier {
       
       // Fetch user details
       await fetchUserDetails();
+
+      await _initSignalR();
       
       _isAuthenticated = true;
       _setLoading(false);
@@ -62,6 +68,7 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> logout() async {
     await _apiService.clearAuth();
+    await _signalRService.stop();
     _user = null;
     _isAuthenticated = false;
     notifyListeners();
@@ -78,6 +85,7 @@ class AuthProvider with ChangeNotifier {
       try {
         await fetchUserDetails();
         _isAuthenticated = true;
+        await _initSignalR();
         _isLoading = false;
         notifyListeners(); // Notify that auth status changed to true
         return true;
@@ -92,6 +100,13 @@ class AuthProvider with ChangeNotifier {
     _isLoading = false;
     notifyListeners();
     return false;
+  }
+
+  Future<void> _initSignalR() async {
+    final token = await _apiService.getToken();
+    if (token != null) {
+      await _signalRService.init(AppConfig.baseUrl, token);
+    }
   }
 
   void _setLoading(bool value) {

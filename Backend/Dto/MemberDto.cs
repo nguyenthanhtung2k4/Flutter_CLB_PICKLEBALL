@@ -37,3 +37,9 @@ public class MemberProfileDetailDto
       public List<object> RecentMatches { get; set; } = new(); // Will be Match objects
 }
 
+public class UpdateMemberProfileDto
+{
+      public string? FullName { get; set; }
+      public string? AvatarUrl { get; set; }
+}
+

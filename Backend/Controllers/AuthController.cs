@@ -17,13 +17,15 @@ public class AuthController : ControllerBase
 {
       private readonly UserManager<IdentityUser> _userManager;
       private readonly SignInManager<IdentityUser> _signInManager;
+      private readonly RoleManager<IdentityRole> _roleManager;
       private readonly IConfiguration _configuration;
       private readonly AppDbContext _context;
 
-      public AuthController(UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager, IConfiguration configuration, AppDbContext context)
+      public AuthController(UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager, RoleManager<IdentityRole> roleManager, IConfiguration configuration, AppDbContext context)
       {
             _userManager = userManager;
             _signInManager = signInManager;
+            _roleManager = roleManager;
             _configuration = configuration;
             _context = context;
       }
@@ -62,7 +64,7 @@ public class AuthController : ControllerBase
                   {
                         token = new JwtSecurityTokenHandler().WriteToken(token),
                         expiration = token.ValidTo,
-                        user = new { user.Id, user.UserName, user.Email }
+                        user = new { user.Id, user.UserName, user.Email, Roles = userRoles }
                   });
             }
             return Unauthorized();
@@ -82,6 +84,8 @@ public class AuthController : ControllerBase
             // Get user from Identity to retrieve email
             var user = await _userManager.FindByIdAsync(userId!);
 
+            var roles = await _userManager.GetRolesAsync(user!);
+
             return Ok(new
             {
                   id = userId,
@@ -92,7 +96,8 @@ public class AuthController : ControllerBase
                   walletBalance = member.WalletBalance,
                   avatarUrl = member.AvatarUrl,
                   tier = member.Tier,
-                  rankLevel = member.RankLevel
+                  rankLevel = member.RankLevel,
+                  roles
             });
       }
 
@@ -122,6 +127,13 @@ public class AuthController : ControllerBase
                   // Return detailed error messages from Identity
                   var errors = string.Join(", ", result.Errors.Select(e => e.Description));
                   return StatusCode(StatusCodes.Status500InternalServerError, new { Status = "Error", Message = $"User creation failed: {errors}" });
+            }
+
+            // Assign default role
+            var defaultRole = "Customer";
+            if (await _roleManager.RoleExistsAsync(defaultRole))
+            {
+                  await _userManager.AddToRoleAsync(user, defaultRole);
             }
 
             // Create Member Profile linked to this User

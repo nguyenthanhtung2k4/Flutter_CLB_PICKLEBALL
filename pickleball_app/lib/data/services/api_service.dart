@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/config/app_config.dart';
@@ -116,6 +117,66 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> holdBooking(int courtId, DateTime startTime, DateTime endTime, {int holdMinutes = 5}) async {
+    try {
+      final response = await _dio.post('/bookings/hold', data: {
+        'courtId': courtId,
+        'startTime': startTime.toIso8601String(),
+        'endTime': endTime.toIso8601String(),
+        'holdMinutes': holdMinutes,
+      });
+      return Map<String, dynamic>.from(response.data);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> confirmBooking(int holdId) async {
+    try {
+      await _dio.post('/bookings/confirm/$holdId');
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> releaseHold(int holdId) async {
+    try {
+      await _dio.delete('/bookings/hold/$holdId');
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> createRecurringBooking({
+    required int courtId,
+    required DateTime startTime,
+    required DateTime endTime,
+    required DateTime recurUntil,
+    required List<int> daysOfWeek,
+    String frequency = 'Weekly',
+  }) async {
+    try {
+      await _dio.post('/bookings/recurring', data: {
+        'courtId': courtId,
+        'startTime': startTime.toIso8601String(),
+        'endTime': endTime.toIso8601String(),
+        'recurUntil': recurUntil.toIso8601String(),
+        'frequency': frequency,
+        'daysOfWeek': daysOfWeek,
+      });
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> cancelBooking(int bookingId) async {
+    try {
+      await _dio.post('/bookings/cancel/$bookingId');
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   // Tournament APIs
   Future<List<dynamic>> getTournaments({String? status}) async {
     try {
@@ -147,14 +208,149 @@ class ApiService {
     }
   }
 
-  // Wallet APIs
-  Future<void> depositWallet(double amount, String? description, {String? proofImageUrl}) async {
+  // Matches APIs
+  Future<List<dynamic>> getUpcomingMatches({int take = 10}) async {
     try {
-      await _dio.post('/wallet/deposit', data: {
+      final response = await _dio.get('/matches/upcoming', queryParameters: {
+        'take': take,
+      });
+      return response.data is List ? response.data : [];
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // Member APIs
+  Future<Map<String, dynamic>> getMyProfile() async {
+    try {
+      final response = await _dio.get('/members/me/profile');
+      return Map<String, dynamic>.from(response.data);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getMembers({String? search, int page = 1, int pageSize = 10}) async {
+    try {
+      final response = await _dio.get('/members', queryParameters: {
+        'search': search,
+        'page': page,
+        'pageSize': pageSize,
+      });
+      return Map<String, dynamic>.from(response.data);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> updateMyProfile({String? fullName, String? avatarUrl}) async {
+    try {
+      await _dio.put('/members/me', data: {
+        if (fullName != null) 'fullName': fullName,
+        if (avatarUrl != null) 'avatarUrl': avatarUrl,
+      });
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // Admin APIs
+  Future<Map<String, dynamic>> getAdminDashboardStats() async {
+    try {
+      final response = await _dio.get('/admin/dashboard/stats');
+      return Map<String, dynamic>.from(response.data);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<List<dynamic>> getRevenueChart({int days = 30}) async {
+    try {
+      final response = await _dio.get('/admin/dashboard/revenue', queryParameters: {
+        'days': days,
+      });
+      return response.data is List ? response.data : [];
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getBookingStats() async {
+    try {
+      final response = await _dio.get('/admin/dashboard/bookings-stats');
+      return Map<String, dynamic>.from(response.data);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getPendingDeposits({int page = 1, int pageSize = 10}) async {
+    try {
+      final response = await _dio.get('/admin/wallet/pending-deposits', queryParameters: {
+        'page': page,
+        'pageSize': pageSize,
+      });
+      return Map<String, dynamic>.from(response.data);
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> approveDeposit(int transactionId) async {
+    try {
+      await _dio.put('/admin/wallet/approve/$transactionId');
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> promoteMemberToAdmin(int memberId) async {
+    try {
+      await _dio.put('/admin/members/$memberId/promote-admin');
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> createAdminMember({
+    required String username,
+    required String email,
+    required String password,
+    String? fullName,
+  }) async {
+    try {
+      await _dio.post('/admin/members/create-admin', data: {
+        'username': username,
+        'email': email,
+        'password': password,
+        if (fullName != null) 'fullName': fullName,
+      });
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // Wallet APIs
+  Future<void> depositWallet(
+    double amount,
+    String? description, {
+    Uint8List? proofImageBytes,
+    String? proofImageName,
+    String? proofImageUrl,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
         'amount': amount,
         'description': description ?? 'Nạp tiền vào ví',
-        'proofImageUrl': proofImageUrl,
+        if (proofImageBytes != null)
+          'proofImage': MultipartFile.fromBytes(
+            proofImageBytes,
+            filename: proofImageName ?? 'proof.jpg',
+          ),
+        if (proofImageUrl != null) 'proofImageUrl': proofImageUrl,
       });
+
+      await _dio.post('/wallet/deposit', data: formData);
     } catch (e) {
       throw _handleError(e);
     }
@@ -201,7 +397,7 @@ class ApiService {
   Future<int> getUnreadNotificationsCount() async {
     try {
       final response = await _dio.get('/notifications/unread-count');
-      return response.data['unreadCount'] ?? 0;
+      return response.data['unreadCount'] ?? response.data['UnreadCount'] ?? 0;
     } catch (e) {
       return 0;
     }
@@ -225,11 +421,17 @@ class ApiService {
     if (error is DioException) {
       if (error.response != null) {
         final data = error.response!.data;
+        if (data is String) {
+          return data;
+        }
         if (data is Map && data.containsKey('message')) {
           return data['message'];
         }
         if (data is Map && data.containsKey('Message')) {
           return data['Message'];
+        }
+        if (data is Map && data.containsKey('errors')) {
+          return data['errors'].toString();
         }
         return 'Lỗi: ${error.response!.statusMessage}';
       }

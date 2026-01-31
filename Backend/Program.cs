@@ -1,5 +1,7 @@
 using Backend.Data;
+using Backend.Services;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 
@@ -8,6 +10,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<IUserIdProvider, NameIdentifierUserIdProvider>();
+builder.Services.AddScoped<MemberTierService>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddHostedService<BookingHoldCleanupService>();
 
 // CORS Configuration for Mobile App
 builder.Services.AddCors(options =>
@@ -61,6 +67,19 @@ builder.Services.AddAuthentication(options =>
             ValidAudience = jwtSettings["Audience"],
             ClockSkew = TimeSpan.Zero
       };
+      options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+      {
+            OnMessageReceived = context =>
+            {
+                  var accessToken = context.Request.Query["access_token"];
+                  var path = context.HttpContext.Request.Path;
+                  if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/pcmHub"))
+                  {
+                        context.Token = accessToken;
+                  }
+                  return Task.CompletedTask;
+            }
+      };
 });
 
 // Swagger Configuration
@@ -68,7 +87,29 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
       c.SwaggerDoc("v1", new OpenApiInfo { Title = "Pickleball Club Management API", Version = "v1" });
-      // Add Security Definition for JWT later
+      c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+      {
+            Name = "Authorization",
+            Type = SecuritySchemeType.Http,
+            Scheme = "Bearer",
+            BearerFormat = "JWT",
+            In = ParameterLocation.Header,
+            Description = "JWT Authorization header using the Bearer scheme."
+      });
+      c.AddSecurityRequirement(new OpenApiSecurityRequirement
+      {
+            {
+                  new OpenApiSecurityScheme
+                  {
+                        Reference = new OpenApiReference
+                        {
+                              Type = ReferenceType.SecurityScheme,
+                              Id = "Bearer"
+                        }
+                  },
+                  Array.Empty<string>()
+            }
+      });
 });
 
 var app = builder.Build();
@@ -81,6 +122,8 @@ if (app.Environment.IsDevelopment())
 }
 
 // app.UseHttpsRedirection(); // Tắt HTTPS redirect để cho phép HTTP từ mobile app
+
+app.UseStaticFiles();
 
 // Enable CORS
 app.UseCors("AllowAll");

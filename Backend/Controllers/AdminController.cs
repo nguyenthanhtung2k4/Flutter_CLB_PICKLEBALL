@@ -1,6 +1,7 @@
 using Backend.Data;
 using Backend.Dto;
 using Backend.Enums;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,10 +14,14 @@ namespace Backend.Controllers;
 public class AdminController : ControllerBase
 {
       private readonly AppDbContext _context;
+      private readonly UserManager<IdentityUser> _userManager;
+      private readonly RoleManager<IdentityRole> _roleManager;
 
-      public AdminController(AppDbContext context)
+      public AdminController(AppDbContext context, UserManager<IdentityUser> userManager, RoleManager<IdentityRole> roleManager)
       {
             _context = context;
+            _userManager = userManager;
+            _roleManager = roleManager;
       }
 
       // GET /api/admin/dashboard/stats
@@ -202,5 +207,79 @@ public class AdminController : ControllerBase
                   PageSize = pageSize,
                   Data = deposits
             });
+      }
+
+      // POST /api/admin/members/create-admin
+      [HttpPost("members/create-admin")]
+      public async Task<IActionResult> CreateAdminMember([FromBody] CreateAdminMemberDto request)
+      {
+            if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+                  return BadRequest("Username, Email, Password are required.");
+
+            var userExists = await _userManager.FindByNameAsync(request.Username);
+            if (userExists != null) return BadRequest("Username already exists.");
+
+            var emailExists = await _userManager.FindByEmailAsync(request.Email);
+            if (emailExists != null) return BadRequest("Email already exists.");
+
+            var user = new IdentityUser
+            {
+                  UserName = request.Username,
+                  Email = request.Email,
+                  EmailConfirmed = true
+            };
+
+            var result = await _userManager.CreateAsync(user, request.Password);
+            if (!result.Succeeded)
+            {
+                  var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                  return BadRequest($"User creation failed: {errors}");
+            }
+
+            if (!await _roleManager.RoleExistsAsync("Admin"))
+            {
+                  await _roleManager.CreateAsync(new IdentityRole("Admin"));
+            }
+
+            await _userManager.AddToRoleAsync(user, "Admin");
+
+            var member = new Backend.Models.Member
+            {
+                  UserId = user.Id,
+                  FullName = string.IsNullOrWhiteSpace(request.FullName) ? request.Username : request.FullName.Trim(),
+                  JoinDate = DateTime.UtcNow,
+                  WalletBalance = 0,
+                  Tier = MemberTier.Standard,
+                  IsActive = true
+            };
+
+            _context.Members.Add(member);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "Admin member created.", MemberId = member.Id });
+      }
+
+      // PUT /api/admin/members/{id}/promote-admin
+      [HttpPut("members/{id}/promote-admin")]
+      public async Task<IActionResult> PromoteMemberToAdmin(int id)
+      {
+            var member = await _context.Members.FirstOrDefaultAsync(m => m.Id == id);
+            if (member == null) return NotFound("Member not found.");
+            if (string.IsNullOrWhiteSpace(member.UserId)) return BadRequest("Member does not have an Identity user.");
+
+            var user = await _userManager.FindByIdAsync(member.UserId);
+            if (user == null) return NotFound("User not found.");
+
+            if (!await _roleManager.RoleExistsAsync("Admin"))
+            {
+                  await _roleManager.CreateAsync(new IdentityRole("Admin"));
+            }
+
+            if (!await _userManager.IsInRoleAsync(user, "Admin"))
+            {
+                  await _userManager.AddToRoleAsync(user, "Admin");
+            }
+
+            return Ok(new { Message = "Member promoted to Admin." });
       }
 }

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import 'package:go_router/go_router.dart';
+import '../../data/services/api_service.dart';
+import 'members_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -18,6 +20,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) {
       context.go('/login');
     }
+  }
+
+  Future<void> _showEditProfileDialog(AuthProvider authProvider) async {
+    final user = authProvider.user;
+    if (user == null) return;
+
+    final nameController = TextEditingController(text: user.fullName);
+    final avatarController = TextEditingController(text: user.avatarUrl ?? '');
+    final api = ApiService();
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Chỉnh sửa hồ sơ'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Họ tên'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: avatarController,
+              decoration: const InputDecoration(labelText: 'Avatar URL (tùy chọn)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await api.updateMyProfile(
+                  fullName: nameController.text.trim().isEmpty ? null : nameController.text.trim(),
+                  avatarUrl: avatarController.text.trim().isEmpty ? null : avatarController.text.trim(),
+                );
+                await authProvider.refreshUser();
+                if (!mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Cập nhật hồ sơ thành công')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -58,10 +115,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               color: Colors.white,
                               shape: BoxShape.circle,
                             ),
-                            child: const CircleAvatar(
+                            child: CircleAvatar(
                               radius: 40,
                               backgroundColor: AppColors.primaryLight,
-                              child: Icon(Icons.person, size: 40, color: Colors.white),
+                              backgroundImage: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                                  ? NetworkImage(user.avatarUrl!)
+                                  : null,
+                              child: (user.avatarUrl == null || user.avatarUrl!.isEmpty)
+                                  ? const Icon(Icons.person, size: 40, color: Colors.white)
+                                  : null,
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -98,12 +160,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _buildInfoRow('Balance', '${user.walletBalance.toStringAsFixed(0)} VNĐ'),
                       ]),
                       const SizedBox(height: 20),
+                      _buildMenuButton(Icons.edit, 'Chỉnh sửa hồ sơ', () => _showEditProfileDialog(authProvider)),
                       if (user.role == 'Admin')
                         _buildMenuButton(Icons.admin_panel_settings, 'Admin Dashboard', () {
                           context.push('/admin');
                         }),
-                      _buildMenuButton(Icons.lock_outline, 'Đổi mật khẩu', () {}),
-                      _buildMenuButton(Icons.people_outline, 'Danh sách thành viên', () {}),
+                      _buildMenuButton(Icons.people_outline, 'Danh sách thành viên', () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const MembersScreen()),
+                        );
+                      }),
                       const SizedBox(height: 20),
                       _buildLogoutButton(),
                     ],

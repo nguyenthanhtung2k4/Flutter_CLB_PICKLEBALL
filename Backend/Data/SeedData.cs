@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Backend.Models;
 using Backend.Enums;
+using System.Data;
 
 namespace Backend.Data;
 
@@ -15,8 +17,11 @@ public static class DbSeeder
             // Ensure database is created
             context.Database.EnsureCreated();
 
+            // Ensure new columns exist (backward-compatible for existing DB)
+            await EnsureBookingHoldColumnAsync(context);
+
             // Seed Roles
-            string[] roles = { "Admin", "User" };
+            string[] roles = { "Admin", "Customer", "User" };
             foreach (var roleName in roles)
             {
                   if (!await roleManager.RoleExistsAsync(roleName))
@@ -77,6 +82,36 @@ public static class DbSeeder
                 };
                 context.Courts.AddRange(courts);
                 await context.SaveChangesAsync();
+            }
+      }
+
+      private static async Task EnsureBookingHoldColumnAsync(AppDbContext context)
+      {
+            var connection = context.Database.GetDbConnection();
+            if (connection.State != ConnectionState.Open)
+            {
+                  await connection.OpenAsync();
+            }
+
+            try
+            {
+                  using var checkCmd = connection.CreateCommand();
+                  checkCmd.CommandText = @"
+                        SELECT COUNT(*) 
+                        FROM INFORMATION_SCHEMA.COLUMNS 
+                        WHERE TABLE_NAME = '729_Bookings' AND COLUMN_NAME = 'HoldUntil'";
+
+                  var exists = (int)(await checkCmd.ExecuteScalarAsync() ?? 0);
+                  if (exists == 0)
+                  {
+                        using var alterCmd = connection.CreateCommand();
+                        alterCmd.CommandText = "ALTER TABLE [729_Bookings] ADD [HoldUntil] datetime2 NULL";
+                        await alterCmd.ExecuteNonQueryAsync();
+                  }
+            }
+            finally
+            {
+                  await connection.CloseAsync();
             }
       }
 }

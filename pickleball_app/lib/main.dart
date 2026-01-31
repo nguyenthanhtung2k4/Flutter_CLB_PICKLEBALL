@@ -94,12 +94,18 @@ class _MainAppState extends State<MainApp> {
           final isAuthenticated = authProvider.isAuthenticated;
           final isLoggingIn = state.matchedLocation == '/login';
           final isRegistering = state.matchedLocation == '/register';
+          final isAdminRoute = state.matchedLocation.startsWith('/admin');
+          final isAdminUser = authProvider.user?.role == 'Admin';
 
           if (!isAuthenticated && !isLoggingIn && !isRegistering) {
             return '/login';
           }
 
           if (isAuthenticated && (isLoggingIn || isRegistering)) {
+            return '/home';
+          }
+
+          if (isAdminRoute && !isAdminUser) {
             return '/home';
           }
 
