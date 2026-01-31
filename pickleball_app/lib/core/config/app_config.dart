@@ -1,9 +1,9 @@
 class AppConfig {
-  // Base API URL - thay đổi theo môi trường của bạn
-  static const String baseUrl = 'http://localhost:5240'; // Android Emulator
+  // static const String baseUrl = 'http://localhost:5240'; // Android Emulator
+  static const String baseUrl = 'https://55db432ed46b.ngrok-free.app'; // Android Emulator
   // static const String baseUrl = 'http://localhost:5240'; // iOS Simulator
   // static const String baseUrl = 'http://192.168.1.x:5240'; // Real device
-  
+
   static const String apiVersion = '/api';
   
   // API Endpoints
